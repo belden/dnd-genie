@@ -271,7 +271,7 @@ Interactive:
 `)
 }
 
-func (a *App) printConfig(conf config.Config) {
+func (a *App) printConfig(conf *config.Config) {
 	if config.IsEmpty(conf) {
 		fmt.Fprintln(a.stdout, "No dndx configuration found. Run /connect first.")
 		fmt.Fprintf(a.stdout, "Config path: %s\n", a.configPath)

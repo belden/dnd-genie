@@ -28,7 +28,7 @@ type chatClient interface {
 	Send(ctx context.Context, messages []chatMessage) (string, error)
 }
 
-type chatClientFactory func(conf config.Config) (chatClient, error)
+type chatClientFactory func(conf *config.Config) (chatClient, error)
 
 type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -46,7 +46,7 @@ type ollamaChatClient struct {
 	doer     httpDoer
 }
 
-func newChatClient(conf config.Config) (chatClient, error) {
+func newChatClient(conf *config.Config) (chatClient, error) {
 	if conf.Provider == "" || conf.Endpoint == "" {
 		return nil, errUsage("no model endpoint configured; run /connect lmstudio first")
 	}

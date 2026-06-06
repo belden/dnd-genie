@@ -135,7 +135,7 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	question := "provide a brief random encounter table for 3 first-level characters. They are in the woods."
 	app, stdout, stderr, configPath := newTestApp(t, question+"\n/quit\n")
 
-	err := config.Save(configPath, config.Config{
+	err := config.Save(configPath, &config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
@@ -144,8 +144,8 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 
 	fake := &fakeChatClient{response: "1. Three nervous scouts cross the trail."}
 	var factoryConfig config.Config
-	app.chatFactory = func(conf config.Config) (chatClient, error) {
-		factoryConfig = conf
+	app.chatFactory = func(conf *config.Config) (chatClient, error) {
+		factoryConfig = *conf
 		return fake, nil
 	}
 
@@ -167,7 +167,7 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 func TestDirectChatCommandSendsQuestion(t *testing.T) {
 	app, stdout, stderr, configPath := newTestApp(t, "")
 
-	err := config.Save(configPath, config.Config{
+	err := config.Save(configPath, &config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
@@ -175,7 +175,7 @@ func TestDirectChatCommandSendsQuestion(t *testing.T) {
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "Roll 1d4 wolves."}
-	app.chatFactory = func(_ config.Config) (chatClient, error) {
+	app.chatFactory = func(_ *config.Config) (chatClient, error) {
 		return fake, nil
 	}
 
@@ -216,7 +216,7 @@ func TestLoadConfigMissingFileReturnsEmptyConfig(t *testing.T) {
 
 func TestSaveConfigCreatesPrivateConfigFile(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "nested", "config.json")
-	conf := config.Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
+	conf := &config.Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
 
 	err := config.Save(configPath, conf)
 	require.NoError(t, err)
