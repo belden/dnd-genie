@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/tauliang/DnDGenie/cli/config"
 )
 
 const (
@@ -26,7 +28,7 @@ type chatClient interface {
 	Send(ctx context.Context, messages []chatMessage) (string, error)
 }
 
-type chatClientFactory func(config Config) (chatClient, error)
+type chatClientFactory func(conf config.Config) (chatClient, error)
 
 type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -44,26 +46,26 @@ type ollamaChatClient struct {
 	doer     httpDoer
 }
 
-func newChatClient(config Config) (chatClient, error) {
-	if config.Provider == "" || config.Endpoint == "" {
+func newChatClient(conf config.Config) (chatClient, error) {
+	if conf.Provider == "" || conf.Endpoint == "" {
 		return nil, errUsage("no model endpoint configured; run /connect lmstudio first")
 	}
-	if config.ChatModel == "" {
+	if conf.ChatModel == "" {
 		return nil, errUsage("no chat model configured; run models --chat MODEL first")
 	}
 
 	doer := &http.Client{Timeout: 5 * time.Minute}
-	switch config.Provider {
+	switch conf.Provider {
 	case providerLMStudio:
 		return openAIChatClient{
-			endpoint: strings.TrimRight(config.Endpoint, "/") + "/chat/completions",
-			model:    config.ChatModel,
+			endpoint: strings.TrimRight(conf.Endpoint, "/") + "/chat/completions",
+			model:    conf.ChatModel,
 			doer:     doer,
 		}, nil
 	case providerOllama:
 		return ollamaChatClient{
-			endpoint: strings.TrimRight(config.Endpoint, "/") + "/api/chat",
-			model:    config.ChatModel,
+			endpoint: strings.TrimRight(conf.Endpoint, "/") + "/api/chat",
+			model:    conf.ChatModel,
 			doer:     doer,
 		}, nil
 	default:

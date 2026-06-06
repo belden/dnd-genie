@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tauliang/DnDGenie/cli/config"
 )
 
 func newTestApp(t *testing.T, stdin string) (*App, *bytes.Buffer, *bytes.Buffer, string) {
@@ -53,10 +54,10 @@ func TestConnectLMStudioNormalizesBareEndpoint(t *testing.T) {
 	code := app.Run([]string{"/connect", "lmstudio", "--url", "http://127.0.0.1:1234"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	config, err := loadConfig(configPath)
+	conf, err := config.LoadConfig(configPath)
 	require.NoError(t, err)
-	assert.Equal(t, providerLMStudio, config.Provider)
-	assert.Equal(t, "http://127.0.0.1:1234/v1", config.Endpoint)
+	assert.Equal(t, providerLMStudio, conf.Provider)
+	assert.Equal(t, "http://127.0.0.1:1234/v1", conf.Endpoint)
 	assert.Contains(t, stdout.String(), "Connected to lmstudio")
 }
 
@@ -66,9 +67,9 @@ func TestConnectOllamaUsesDefaultEndpoint(t *testing.T) {
 	code := app.Run([]string{"/connect", "ollama"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	config, err := loadConfig(configPath)
+	conf, err := config.LoadConfig(configPath)
 	require.NoError(t, err)
-	assert.Equal(t, defaultOllamaEndpoint, config.Endpoint)
+	assert.Equal(t, defaultOllamaEndpoint, conf.Endpoint)
 }
 
 func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
@@ -81,10 +82,10 @@ func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
 	code = app.Run([]string{"models", "--chat", "glm-5.0", "--embedding=text-embedding-nomic-embed-text-v1.5"})
 	assert.Equal(t, 0, code, "models failed", stderr.String())
 
-	config, err := loadConfig(configPath)
+	conf, err := config.LoadConfig(configPath)
 	require.NoError(t, err)
-	assert.Equal(t, "glm-5.0", config.ChatModel)
-	assert.Equal(t, "text-embedding-nomic-embed-text-v1.5", config.EmbeddingModel)
+	assert.Equal(t, "glm-5.0", conf.ChatModel)
+	assert.Equal(t, "text-embedding-nomic-embed-text-v1.5", conf.EmbeddingModel)
 	assert.Contains(t, stdout.String(), "Configured models")
 }
 
@@ -115,10 +116,10 @@ func TestInteractiveModeProcessesCommands(t *testing.T) {
 	code := app.Run(nil)
 	assert.Equal(t, 0, code, stderr.String())
 
-	config, err := loadConfig(configPath)
+	conf, err := config.LoadConfig(configPath)
 	require.NoError(t, err)
-	assert.Equal(t, "chat", config.ChatModel)
-	assert.Equal(t, "embed", config.EmbeddingModel)
+	assert.Equal(t, "chat", conf.ChatModel)
+	assert.Equal(t, "embed", conf.EmbeddingModel)
 
 	output := stdout.String()
 	assert.Contains(t, output, "dndx chat", "stdout missing banner")
@@ -134,7 +135,7 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	question := "provide a brief random encounter table for 3 first-level characters. They are in the woods."
 	app, stdout, stderr, configPath := newTestApp(t, question+"\n/quit\n")
 
-	err := saveConfig(configPath, Config{
+	err := config.SaveConfig(configPath, config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
@@ -142,9 +143,9 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "1. Three nervous scouts cross the trail."}
-	var factoryConfig Config
-	app.chatFactory = func(config Config) (chatClient, error) {
-		factoryConfig = config
+	var factoryConfig config.Config
+	app.chatFactory = func(conf config.Config) (chatClient, error) {
+		factoryConfig = conf
 		return fake, nil
 	}
 
@@ -166,7 +167,7 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 func TestDirectChatCommandSendsQuestion(t *testing.T) {
 	app, stdout, stderr, configPath := newTestApp(t, "")
 
-	err := saveConfig(configPath, Config{
+	err := config.SaveConfig(configPath, config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
@@ -174,7 +175,7 @@ func TestDirectChatCommandSendsQuestion(t *testing.T) {
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "Roll 1d4 wolves."}
-	app.chatFactory = func(_ Config) (chatClient, error) {
+	app.chatFactory = func(_ config.Config) (chatClient, error) {
 		return fake, nil
 	}
 
@@ -208,16 +209,16 @@ func TestConfigPathFromEnvironment(t *testing.T) {
 }
 
 func TestLoadConfigMissingFileReturnsEmptyConfig(t *testing.T) {
-	config, err := loadConfig(filepath.Join(t.TempDir(), "missing.json"))
+	conf, err := config.LoadConfig(filepath.Join(t.TempDir(), "missing.json"))
 	require.NoError(t, err)
-	assert.True(t, isEmptyConfig(config), "config should be empty")
+	assert.True(t, config.IsEmptyConfig(conf), "config should be empty")
 }
 
 func TestSaveConfigCreatesPrivateConfigFile(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "nested", "config.json")
-	config := Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
+	conf := config.Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
 
-	err := saveConfig(configPath, config)
+	err := config.SaveConfig(configPath, conf)
 	require.NoError(t, err)
 
 	info, err := os.Stat(configPath)
