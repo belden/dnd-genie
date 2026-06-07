@@ -16,7 +16,7 @@ import (
 	"github.com/tauliang/DnDGenie/cli/config"
 )
 
-func newTestApp(t *testing.T, stdin string) (*App, *bytes.Buffer, *bytes.Buffer) {
+func newTestApp(t *testing.T, stdin string, conf *config.Config) (*App, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	stdout := &bytes.Buffer{}
@@ -25,6 +25,10 @@ func newTestApp(t *testing.T, stdin string) (*App, *bytes.Buffer, *bytes.Buffer)
 	app, err := NewApp(strings.NewReader(stdin), stdout, stderr, configPath)
 	if err != nil {
 		t.Fatalf("expected no error, got: %+v", err)
+	}
+
+	if conf != nil {
+		app.config.FromConfig(conf)
 	}
 
 	return app, stdout, stderr
@@ -54,7 +58,7 @@ func (f doerFunc) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestConnectLMStudioNormalizesBareEndpoint(t *testing.T) {
-	app, stdout, stderr := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"/connect", "lmstudio", "--url", "http://127.0.0.1:1234"})
 	assert.Equal(t, 0, code, stderr.String())
@@ -66,7 +70,7 @@ func TestConnectLMStudioNormalizesBareEndpoint(t *testing.T) {
 }
 
 func TestConnectOllamaUsesDefaultEndpoint(t *testing.T) {
-	app, _, stderr := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"/connect", "ollama"})
 	assert.Equal(t, 0, code, stderr.String())
@@ -76,7 +80,7 @@ func TestConnectOllamaUsesDefaultEndpoint(t *testing.T) {
 }
 
 func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
-	app, stdout, stderr := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"connect", "lmstudio"})
 	assert.Equal(t, 0, code, "connect failed", stderr.String())
@@ -92,7 +96,7 @@ func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
 }
 
 func TestModelsPrintsExistingConfig(t *testing.T) {
-	app, stdout, stderr := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"connect", "lmstudio"})
 	assert.Equal(t, 0, code, "connect failed", stderr.String())
@@ -113,6 +117,7 @@ func TestInteractiveModeProcessesCommands(t *testing.T) {
 	app, stdout, stderr := newTestApp(
 		t,
 		"/connect lmstudio --url http://localhost:1234\nmodels --chat chat --embedding embed\nstatus\n/quit\n",
+		nil,
 	)
 
 	code := app.Run(nil)
@@ -134,10 +139,11 @@ func TestInteractivePromptBlinksUnderscore(t *testing.T) {
 
 func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	question := "provide a brief random encounter table for 3 first-level characters. They are in the woods."
-	app, stdout, stderr := newTestApp(t, question+"\n/quit\n")
-	app.config.Provider = providerLMStudio
-	app.config.Endpoint = defaultLMStudioEndpoint
-	app.config.ChatModel = "glm-5.0"
+	app, stdout, stderr := newTestApp(t, question+"\n/quit\n", &config.Config{
+		Provider:  providerLMStudio,
+		Endpoint:  defaultLMStudioEndpoint,
+		ChatModel: "glm-5.0",
+	})
 
 	err := app.config.Save()
 	require.NoError(t, err)
@@ -165,10 +171,11 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 }
 
 func TestDirectChatCommandSendsQuestion(t *testing.T) {
-	app, stdout, stderr := newTestApp(t, "")
-	app.config.Provider = providerLMStudio
-	app.config.Endpoint = defaultLMStudioEndpoint
-	app.config.ChatModel = "glm-5.0"
+	app, stdout, stderr := newTestApp(t, "", &config.Config{
+		Provider:  providerLMStudio,
+		Endpoint:  defaultLMStudioEndpoint,
+		ChatModel: "glm-5.0",
+	})
 	err := app.config.Save()
 	require.NoError(t, err)
 
@@ -185,7 +192,7 @@ func TestDirectChatCommandSendsQuestion(t *testing.T) {
 }
 
 func TestChatRequiresConfiguredEndpoint(t *testing.T) {
-	app, _, stderr := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"chat", "hello"})
 	assert.NotEqual(t, 0, code, "expected failure")
@@ -193,7 +200,7 @@ func TestChatRequiresConfiguredEndpoint(t *testing.T) {
 }
 
 func TestUnknownProviderReturnsUsageError(t *testing.T) {
-	app, _, stderr := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"/connect", "kobold"})
 	assert.NotEqual(t, 0, code, "expected failure")

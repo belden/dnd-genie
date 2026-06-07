@@ -37,6 +37,12 @@ func Load(path string) (*Config, error) {
 	return config, nil
 }
 
+func (c *Config) FromConfig(conf *Config) {
+	keepPath := c.path
+	*c = *conf
+	c.path = keepPath
+}
+
 func (c *Config) Save() error {
 	if err := os.MkdirAll(filepath.Dir(c.path), 0o755); err != nil {
 		return err
