@@ -31,8 +31,7 @@ from lmstudio_config import response_to_text
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIRECTORIES = [
-    ROOT / "data/basic-rules/www.dndbeyond.com/sources",
-    ROOT / "data/basic-rules/www.dndbeyond.com/compendium/rules/basic-rules",
+    ROOT / "data/cc-srd/SRD5.1-CCBY4.0License-TT.txt",
 ]
 EXIT_COMMANDS = {"exit", "quit"}
 EMPTY_ANSWER_MESSAGE = (
