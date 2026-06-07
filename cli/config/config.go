@@ -14,7 +14,7 @@ type Config struct {
 	EmbeddingModel string `json:"embedding_model,omitempty"`
 }
 
-func LoadConfig(path string) (Config, error) {
+func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -30,7 +30,7 @@ func LoadConfig(path string) (Config, error) {
 	return config, nil
 }
 
-func SaveConfig(path string, config Config) error {
+func Save(path string, config Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func SaveConfig(path string, config Config) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-func IsEmptyConfig(config Config) bool {
+func IsEmpty(config Config) bool {
 	return config.Provider == "" &&
 		config.Endpoint == "" &&
 		config.ChatModel == "" &&

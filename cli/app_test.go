@@ -54,7 +54,7 @@ func TestConnectLMStudioNormalizesBareEndpoint(t *testing.T) {
 	code := app.Run([]string{"/connect", "lmstudio", "--url", "http://127.0.0.1:1234"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	conf, err := config.LoadConfig(configPath)
+	conf, err := config.Load(configPath)
 	require.NoError(t, err)
 	assert.Equal(t, providerLMStudio, conf.Provider)
 	assert.Equal(t, "http://127.0.0.1:1234/v1", conf.Endpoint)
@@ -67,7 +67,7 @@ func TestConnectOllamaUsesDefaultEndpoint(t *testing.T) {
 	code := app.Run([]string{"/connect", "ollama"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	conf, err := config.LoadConfig(configPath)
+	conf, err := config.Load(configPath)
 	require.NoError(t, err)
 	assert.Equal(t, defaultOllamaEndpoint, conf.Endpoint)
 }
@@ -82,7 +82,7 @@ func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
 	code = app.Run([]string{"models", "--chat", "glm-5.0", "--embedding=text-embedding-nomic-embed-text-v1.5"})
 	assert.Equal(t, 0, code, "models failed", stderr.String())
 
-	conf, err := config.LoadConfig(configPath)
+	conf, err := config.Load(configPath)
 	require.NoError(t, err)
 	assert.Equal(t, "glm-5.0", conf.ChatModel)
 	assert.Equal(t, "text-embedding-nomic-embed-text-v1.5", conf.EmbeddingModel)
@@ -116,7 +116,7 @@ func TestInteractiveModeProcessesCommands(t *testing.T) {
 	code := app.Run(nil)
 	assert.Equal(t, 0, code, stderr.String())
 
-	conf, err := config.LoadConfig(configPath)
+	conf, err := config.Load(configPath)
 	require.NoError(t, err)
 	assert.Equal(t, "chat", conf.ChatModel)
 	assert.Equal(t, "embed", conf.EmbeddingModel)
@@ -135,7 +135,7 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	question := "provide a brief random encounter table for 3 first-level characters. They are in the woods."
 	app, stdout, stderr, configPath := newTestApp(t, question+"\n/quit\n")
 
-	err := config.SaveConfig(configPath, config.Config{
+	err := config.Save(configPath, config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
@@ -167,7 +167,7 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 func TestDirectChatCommandSendsQuestion(t *testing.T) {
 	app, stdout, stderr, configPath := newTestApp(t, "")
 
-	err := config.SaveConfig(configPath, config.Config{
+	err := config.Save(configPath, config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
@@ -209,16 +209,16 @@ func TestConfigPathFromEnvironment(t *testing.T) {
 }
 
 func TestLoadConfigMissingFileReturnsEmptyConfig(t *testing.T) {
-	conf, err := config.LoadConfig(filepath.Join(t.TempDir(), "missing.json"))
+	conf, err := config.Load(filepath.Join(t.TempDir(), "missing.json"))
 	require.NoError(t, err)
-	assert.True(t, config.IsEmptyConfig(conf), "config should be empty")
+	assert.True(t, config.IsEmpty(conf), "config should be empty")
 }
 
 func TestSaveConfigCreatesPrivateConfigFile(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "nested", "config.json")
 	conf := config.Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
 
-	err := config.SaveConfig(configPath, conf)
+	err := config.Save(configPath, conf)
 	require.NoError(t, err)
 
 	info, err := os.Stat(configPath)

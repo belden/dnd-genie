@@ -146,14 +146,14 @@ func (a *App) runConnect(args []string) error {
 		return err
 	}
 
-	conf, err := config.LoadConfig(a.configPath)
+	conf, err := config.Load(a.configPath)
 	if err != nil {
 		return err
 	}
 
 	conf.Provider = provider
 	conf.Endpoint = normalizeEndpoint(provider, options["url"])
-	if err := config.SaveConfig(a.configPath, conf); err != nil {
+	if err := config.Save(a.configPath, conf); err != nil {
 		return err
 	}
 
@@ -173,7 +173,7 @@ func (a *App) runModels(args []string) error {
 		return errUsage("usage: dndx models [--chat MODEL] [--embedding MODEL]")
 	}
 
-	conf, err := config.LoadConfig(a.configPath)
+	conf, err := config.Load(a.configPath)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func (a *App) runModels(args []string) error {
 		conf.EmbeddingModel = embeddingModel
 	}
 
-	if err := config.SaveConfig(a.configPath, conf); err != nil {
+	if err := config.Save(a.configPath, conf); err != nil {
 		return err
 	}
 
@@ -201,7 +201,7 @@ func (a *App) runModels(args []string) error {
 }
 
 func (a *App) runStatus() error {
-	conf, err := config.LoadConfig(a.configPath)
+	conf, err := config.Load(a.configPath)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (a *App) runChat(question string) error {
 		return errUsage("usage: dndx chat QUESTION")
 	}
 
-	conf, err := config.LoadConfig(a.configPath)
+	conf, err := config.Load(a.configPath)
 	if err != nil {
 		return err
 	}
@@ -272,7 +272,7 @@ Interactive:
 }
 
 func (a *App) printConfig(conf config.Config) {
-	if config.IsEmptyConfig(conf) {
+	if config.IsEmpty(conf) {
 		fmt.Fprintln(a.stdout, "No dndx configuration found. Run /connect first.")
 		fmt.Fprintf(a.stdout, "Config path: %s\n", a.configPath)
 		return
