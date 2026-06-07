@@ -135,11 +135,12 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	question := "provide a brief random encounter table for 3 first-level characters. They are in the woods."
 	app, stdout, stderr, configPath := newTestApp(t, question+"\n/quit\n")
 
-	err := config.Save(configPath, &config.Config{
+	conf := &config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
-	})
+	}
+	err := conf.Save(configPath)
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "1. Three nervous scouts cross the trail."}
@@ -167,11 +168,12 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 func TestDirectChatCommandSendsQuestion(t *testing.T) {
 	app, stdout, stderr, configPath := newTestApp(t, "")
 
-	err := config.Save(configPath, &config.Config{
+	conf := &config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
-	})
+	}
+	err := conf.Save(configPath)
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "Roll 1d4 wolves."}
@@ -211,14 +213,14 @@ func TestConfigPathFromEnvironment(t *testing.T) {
 func TestLoadConfigMissingFileReturnsEmptyConfig(t *testing.T) {
 	conf, err := config.Load(filepath.Join(t.TempDir(), "missing.json"))
 	require.NoError(t, err)
-	assert.True(t, config.IsEmpty(conf), "config should be empty")
+	assert.True(t, conf.IsEmpty(), "config should be empty")
 }
 
 func TestSaveConfigCreatesPrivateConfigFile(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "nested", "config.json")
 	conf := &config.Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
 
-	err := config.Save(configPath, conf)
+	err := conf.Save(configPath)
 	require.NoError(t, err)
 
 	info, err := os.Stat(configPath)

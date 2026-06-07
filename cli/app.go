@@ -153,7 +153,7 @@ func (a *App) runConnect(args []string) error {
 
 	conf.Provider = provider
 	conf.Endpoint = normalizeEndpoint(provider, options["url"])
-	if err := config.Save(a.configPath, conf); err != nil {
+	if err := conf.Save(a.configPath); err != nil {
 		return err
 	}
 
@@ -190,7 +190,7 @@ func (a *App) runModels(args []string) error {
 		conf.EmbeddingModel = embeddingModel
 	}
 
-	if err := config.Save(a.configPath, conf); err != nil {
+	if err := conf.Save(a.configPath); err != nil {
 		return err
 	}
 
@@ -272,7 +272,7 @@ Interactive:
 }
 
 func (a *App) printConfig(conf *config.Config) {
-	if config.IsEmpty(conf) {
+	if conf.IsEmpty() {
 		fmt.Fprintln(a.stdout, "No dndx configuration found. Run /connect first.")
 		fmt.Fprintf(a.stdout, "Config path: %s\n", a.configPath)
 		return

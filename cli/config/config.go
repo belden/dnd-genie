@@ -30,12 +30,12 @@ func Load(path string) (*Config, error) {
 	return config, nil
 }
 
-func Save(path string, config *Config) error {
+func (c *Config) Save(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -43,9 +43,9 @@ func Save(path string, config *Config) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-func IsEmpty(config *Config) bool {
-	return config.Provider == "" &&
-		config.Endpoint == "" &&
-		config.ChatModel == "" &&
-		config.EmbeddingModel == ""
+func (c *Config) IsEmpty() bool {
+	return c.Provider == "" &&
+		c.Endpoint == "" &&
+		c.ChatModel == "" &&
+		c.EmbeddingModel == ""
 }
