@@ -22,7 +22,7 @@ type App struct {
 	stdin       io.Reader
 	stdout      io.Writer
 	stderr      io.Writer
-	configPath  string
+	config      *config.Config
 	chatFactory chatClientFactory
 	chatHistory []chatMessage
 }
@@ -37,14 +37,19 @@ func errUsage(message string) error {
 	return usageError(message)
 }
 
-func NewApp(stdin io.Reader, stdout io.Writer, stderr io.Writer, configPath string) *App {
+func NewApp(stdin io.Reader, stdout io.Writer, stderr io.Writer, configPath string) (*App, error) {
+	conf, err := config.Load(configPath)
+	if err != nil {
+		return nil, err
+	}
+
 	return &App{
 		stdin:       stdin,
 		stdout:      stdout,
 		stderr:      stderr,
-		configPath:  configPath,
+		config:      conf,
 		chatFactory: newChatClient,
-	}
+	}, nil
 }
 
 func (a *App) Run(args []string) int {
@@ -146,11 +151,7 @@ func (a *App) runConnect(args []string) error {
 		return err
 	}
 
-	conf, err := config.Load(a.configPath)
-	if err != nil {
-		return err
-	}
-
+	conf := a.config
 	conf.Provider = provider
 	conf.Endpoint = normalizeEndpoint(provider, options["url"])
 	if err := conf.Save(); err != nil {
@@ -173,13 +174,10 @@ func (a *App) runModels(args []string) error {
 		return errUsage("usage: dndx models [--chat MODEL] [--embedding MODEL]")
 	}
 
-	conf, err := config.Load(a.configPath)
-	if err != nil {
-		return err
-	}
+	conf := a.config
 
 	if len(options) == 0 {
-		a.printConfig(conf)
+		a.printConfig()
 		return nil
 	}
 
@@ -201,11 +199,7 @@ func (a *App) runModels(args []string) error {
 }
 
 func (a *App) runStatus() error {
-	conf, err := config.Load(a.configPath)
-	if err != nil {
-		return err
-	}
-	a.printConfig(conf)
+	a.printConfig()
 	return nil
 }
 
@@ -215,12 +209,7 @@ func (a *App) runChat(question string) error {
 		return errUsage("usage: dndx chat QUESTION")
 	}
 
-	conf, err := config.Load(a.configPath)
-	if err != nil {
-		return err
-	}
-
-	client, err := a.chatFactory(conf)
+	client, err := a.chatFactory(a.config)
 	if err != nil {
 		return err
 	}
@@ -271,7 +260,9 @@ Interactive:
 `)
 }
 
-func (a *App) printConfig(conf *config.Config) {
+func (a *App) printConfig() {
+	conf := a.config
+
 	if conf.IsEmpty() {
 		fmt.Fprintln(a.stdout, "No dndx configuration found. Run /connect first.")
 		fmt.Fprintf(a.stdout, "Config path: %s\n", conf.Path())

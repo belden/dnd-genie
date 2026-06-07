@@ -16,13 +16,18 @@ import (
 	"github.com/tauliang/DnDGenie/cli/config"
 )
 
-func newTestApp(t *testing.T, stdin string) (*App, *bytes.Buffer, *bytes.Buffer, string) {
+func newTestApp(t *testing.T, stdin string) (*App, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	app := NewApp(strings.NewReader(stdin), stdout, stderr, configPath)
-	return app, stdout, stderr, configPath
+
+	app, err := NewApp(strings.NewReader(stdin), stdout, stderr, configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %+v", err)
+	}
+
+	return app, stdout, stderr
 }
 
 // helper function, returns the last element of a slice
@@ -49,31 +54,29 @@ func (f doerFunc) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestConnectLMStudioNormalizesBareEndpoint(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "")
 
 	code := app.Run([]string{"/connect", "lmstudio", "--url", "http://127.0.0.1:1234"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	conf, err := config.Load(configPath)
-	require.NoError(t, err)
+	conf := app.config
 	assert.Equal(t, providerLMStudio, conf.Provider)
 	assert.Equal(t, "http://127.0.0.1:1234/v1", conf.Endpoint)
 	assert.Contains(t, stdout.String(), "Connected to lmstudio")
 }
 
 func TestConnectOllamaUsesDefaultEndpoint(t *testing.T) {
-	app, _, stderr, configPath := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "")
 
 	code := app.Run([]string{"/connect", "ollama"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	conf, err := config.Load(configPath)
-	require.NoError(t, err)
+	conf := app.config
 	assert.Equal(t, defaultOllamaEndpoint, conf.Endpoint)
 }
 
 func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "")
 
 	code := app.Run([]string{"connect", "lmstudio"})
 	assert.Equal(t, 0, code, "connect failed", stderr.String())
@@ -82,15 +85,14 @@ func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
 	code = app.Run([]string{"models", "--chat", "glm-5.0", "--embedding=text-embedding-nomic-embed-text-v1.5"})
 	assert.Equal(t, 0, code, "models failed", stderr.String())
 
-	conf, err := config.Load(configPath)
-	require.NoError(t, err)
+	conf := app.config
 	assert.Equal(t, "glm-5.0", conf.ChatModel)
 	assert.Equal(t, "text-embedding-nomic-embed-text-v1.5", conf.EmbeddingModel)
 	assert.Contains(t, stdout.String(), "Configured models")
 }
 
 func TestModelsPrintsExistingConfig(t *testing.T) {
-	app, stdout, stderr, _ := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "")
 
 	code := app.Run([]string{"connect", "lmstudio"})
 	assert.Equal(t, 0, code, "connect failed", stderr.String())
@@ -108,7 +110,7 @@ func TestModelsPrintsExistingConfig(t *testing.T) {
 }
 
 func TestInteractiveModeProcessesCommands(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(
+	app, stdout, stderr := newTestApp(
 		t,
 		"/connect lmstudio --url http://localhost:1234\nmodels --chat chat --embedding embed\nstatus\n/quit\n",
 	)
@@ -116,8 +118,7 @@ func TestInteractiveModeProcessesCommands(t *testing.T) {
 	code := app.Run(nil)
 	assert.Equal(t, 0, code, stderr.String())
 
-	conf, err := config.Load(configPath)
-	require.NoError(t, err)
+	conf := app.config
 	assert.Equal(t, "chat", conf.ChatModel)
 	assert.Equal(t, "embed", conf.EmbeddingModel)
 
@@ -133,14 +134,12 @@ func TestInteractivePromptBlinksUnderscore(t *testing.T) {
 
 func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	question := "provide a brief random encounter table for 3 first-level characters. They are in the woods."
-	app, stdout, stderr, configPath := newTestApp(t, question+"\n/quit\n")
+	app, stdout, stderr := newTestApp(t, question+"\n/quit\n")
+	app.config.Provider = providerLMStudio
+	app.config.Endpoint = defaultLMStudioEndpoint
+	app.config.ChatModel = "glm-5.0"
 
-	conf := &config.Config{
-		Provider:  providerLMStudio,
-		Endpoint:  defaultLMStudioEndpoint,
-		ChatModel: "glm-5.0",
-	}
-	err := conf.Save(configPath)
+	err := app.config.Save()
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "1. Three nervous scouts cross the trail."}
@@ -166,14 +165,11 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 }
 
 func TestDirectChatCommandSendsQuestion(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(t, "")
-
-	conf := &config.Config{
-		Provider:  providerLMStudio,
-		Endpoint:  defaultLMStudioEndpoint,
-		ChatModel: "glm-5.0",
-	}
-	err := conf.Save(configPath)
+	app, stdout, stderr := newTestApp(t, "")
+	app.config.Provider = providerLMStudio
+	app.config.Endpoint = defaultLMStudioEndpoint
+	app.config.ChatModel = "glm-5.0"
+	err := app.config.Save()
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "Roll 1d4 wolves."}
@@ -189,7 +185,7 @@ func TestDirectChatCommandSendsQuestion(t *testing.T) {
 }
 
 func TestChatRequiresConfiguredEndpoint(t *testing.T) {
-	app, _, stderr, _ := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "")
 
 	code := app.Run([]string{"chat", "hello"})
 	assert.NotEqual(t, 0, code, "expected failure")
@@ -197,7 +193,7 @@ func TestChatRequiresConfiguredEndpoint(t *testing.T) {
 }
 
 func TestUnknownProviderReturnsUsageError(t *testing.T) {
-	app, _, stderr, _ := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "")
 
 	code := app.Run([]string{"/connect", "kobold"})
 	assert.NotEqual(t, 0, code, "expected failure")
@@ -218,9 +214,14 @@ func TestLoadConfigMissingFileReturnsEmptyConfig(t *testing.T) {
 
 func TestSaveConfigCreatesPrivateConfigFile(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "nested", "config.json")
-	conf := &config.Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
+	conf, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	err := conf.Save(configPath)
+	conf.Provider = providerLMStudio
+	conf.Endpoint = defaultLMStudioEndpoint
+	err = conf.Save()
 	require.NoError(t, err)
 
 	info, err := os.Stat(configPath)
