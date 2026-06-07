@@ -8,17 +8,23 @@ import (
 )
 
 type Config struct {
+	path string
+
 	Provider       string `json:"provider,omitempty"`
 	Endpoint       string `json:"endpoint,omitempty"`
 	ChatModel      string `json:"chat_model,omitempty"`
 	EmbeddingModel string `json:"embedding_model,omitempty"`
 }
 
+func (c *Config) Path() string {
+	return c.path
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &Config{}, nil
+			return &Config{path: path}, nil
 		}
 		return nil, err
 	}
@@ -27,11 +33,12 @@ func Load(path string) (*Config, error) {
 	if err := json.Unmarshal(data, config); err != nil {
 		return nil, err
 	}
+	config.path = path
 	return config, nil
 }
 
-func (c *Config) Save(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+func (c *Config) Save() error {
+	if err := os.MkdirAll(filepath.Dir(c.path), 0o755); err != nil {
 		return err
 	}
 
@@ -40,7 +47,7 @@ func (c *Config) Save(path string) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o600)
+	return os.WriteFile(c.path, data, 0o600)
 }
 
 func (c *Config) IsEmpty() bool {

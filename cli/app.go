@@ -153,7 +153,7 @@ func (a *App) runConnect(args []string) error {
 
 	conf.Provider = provider
 	conf.Endpoint = normalizeEndpoint(provider, options["url"])
-	if err := conf.Save(a.configPath); err != nil {
+	if err := conf.Save(); err != nil {
 		return err
 	}
 
@@ -190,7 +190,7 @@ func (a *App) runModels(args []string) error {
 		conf.EmbeddingModel = embeddingModel
 	}
 
-	if err := conf.Save(a.configPath); err != nil {
+	if err := conf.Save(); err != nil {
 		return err
 	}
 
@@ -274,7 +274,7 @@ Interactive:
 func (a *App) printConfig(conf *config.Config) {
 	if conf.IsEmpty() {
 		fmt.Fprintln(a.stdout, "No dndx configuration found. Run /connect first.")
-		fmt.Fprintf(a.stdout, "Config path: %s\n", a.configPath)
+		fmt.Fprintf(a.stdout, "Config path: %s\n", conf.Path())
 		return
 	}
 
@@ -282,7 +282,7 @@ func (a *App) printConfig(conf *config.Config) {
 	fmt.Fprintf(a.stdout, "Endpoint: %s\n", valueOrPlaceholder(conf.Endpoint))
 	fmt.Fprintf(a.stdout, "Chat model: %s\n", valueOrPlaceholder(conf.ChatModel))
 	fmt.Fprintf(a.stdout, "Embedding model: %s\n", valueOrPlaceholder(conf.EmbeddingModel))
-	fmt.Fprintf(a.stdout, "Config path: %s\n", a.configPath)
+	fmt.Fprintf(a.stdout, "Config path: %s\n", conf.Path())
 }
 
 func valueOrPlaceholder(value string) string {
