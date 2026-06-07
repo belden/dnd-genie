@@ -8,6 +8,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/tauliang/DnDGenie/cli/config"
 )
 
 const (
@@ -20,7 +22,7 @@ type App struct {
 	stdin       io.Reader
 	stdout      io.Writer
 	stderr      io.Writer
-	configPath  string
+	config      *config.Config
 	chatFactory chatClientFactory
 	chatHistory []chatMessage
 }
@@ -35,14 +37,19 @@ func errUsage(message string) error {
 	return usageError(message)
 }
 
-func NewApp(stdin io.Reader, stdout io.Writer, stderr io.Writer, configPath string) *App {
+func NewApp(stdin io.Reader, stdout io.Writer, stderr io.Writer, configPath string) (*App, error) {
+	conf, err := config.Load(configPath)
+	if err != nil {
+		return nil, err
+	}
+
 	return &App{
 		stdin:       stdin,
 		stdout:      stdout,
 		stderr:      stderr,
-		configPath:  configPath,
+		config:      conf,
 		chatFactory: newChatClient,
-	}
+	}, nil
 }
 
 func (a *App) Run(args []string) int {
@@ -144,18 +151,14 @@ func (a *App) runConnect(args []string) error {
 		return err
 	}
 
-	config, err := loadConfig(a.configPath)
-	if err != nil {
+	conf := a.config
+	conf.Provider = provider
+	conf.Endpoint = normalizeEndpoint(provider, options["url"])
+	if err := conf.Save(); err != nil {
 		return err
 	}
 
-	config.Provider = provider
-	config.Endpoint = normalizeEndpoint(provider, options["url"])
-	if err := saveConfig(a.configPath, config); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(a.stdout, "Connected to %s at %s\n", config.Provider, config.Endpoint)
+	fmt.Fprintf(a.stdout, "Connected to %s at %s\n", conf.Provider, conf.Endpoint)
 	return nil
 }
 
@@ -171,39 +174,32 @@ func (a *App) runModels(args []string) error {
 		return errUsage("usage: dndx models [--chat MODEL] [--embedding MODEL]")
 	}
 
-	config, err := loadConfig(a.configPath)
-	if err != nil {
-		return err
-	}
+	conf := a.config
 
 	if len(options) == 0 {
-		a.printConfig(config)
+		a.printConfig()
 		return nil
 	}
 
 	if chatModel, ok := options["chat"]; ok {
-		config.ChatModel = chatModel
+		conf.ChatModel = chatModel
 	}
 	if embeddingModel, ok := options["embedding"]; ok {
-		config.EmbeddingModel = embeddingModel
+		conf.EmbeddingModel = embeddingModel
 	}
 
-	if err := saveConfig(a.configPath, config); err != nil {
+	if err := conf.Save(); err != nil {
 		return err
 	}
 
 	fmt.Fprintln(a.stdout, "Configured models:")
-	fmt.Fprintf(a.stdout, "  chat: %s\n", valueOrPlaceholder(config.ChatModel))
-	fmt.Fprintf(a.stdout, "  embedding: %s\n", valueOrPlaceholder(config.EmbeddingModel))
+	fmt.Fprintf(a.stdout, "  chat: %s\n", valueOrPlaceholder(conf.ChatModel))
+	fmt.Fprintf(a.stdout, "  embedding: %s\n", valueOrPlaceholder(conf.EmbeddingModel))
 	return nil
 }
 
 func (a *App) runStatus() error {
-	config, err := loadConfig(a.configPath)
-	if err != nil {
-		return err
-	}
-	a.printConfig(config)
+	a.printConfig()
 	return nil
 }
 
@@ -213,12 +209,7 @@ func (a *App) runChat(question string) error {
 		return errUsage("usage: dndx chat QUESTION")
 	}
 
-	config, err := loadConfig(a.configPath)
-	if err != nil {
-		return err
-	}
-
-	client, err := a.chatFactory(config)
+	client, err := a.chatFactory(a.config)
 	if err != nil {
 		return err
 	}
@@ -269,18 +260,20 @@ Interactive:
 `)
 }
 
-func (a *App) printConfig(config Config) {
-	if isEmptyConfig(config) {
+func (a *App) printConfig() {
+	conf := a.config
+
+	if conf.IsEmpty() {
 		fmt.Fprintln(a.stdout, "No dndx configuration found. Run /connect first.")
-		fmt.Fprintf(a.stdout, "Config path: %s\n", a.configPath)
+		fmt.Fprintf(a.stdout, "Config path: %s\n", conf.Path())
 		return
 	}
 
-	fmt.Fprintf(a.stdout, "Provider: %s\n", valueOrPlaceholder(config.Provider))
-	fmt.Fprintf(a.stdout, "Endpoint: %s\n", valueOrPlaceholder(config.Endpoint))
-	fmt.Fprintf(a.stdout, "Chat model: %s\n", valueOrPlaceholder(config.ChatModel))
-	fmt.Fprintf(a.stdout, "Embedding model: %s\n", valueOrPlaceholder(config.EmbeddingModel))
-	fmt.Fprintf(a.stdout, "Config path: %s\n", a.configPath)
+	fmt.Fprintf(a.stdout, "Provider: %s\n", valueOrPlaceholder(conf.Provider))
+	fmt.Fprintf(a.stdout, "Endpoint: %s\n", valueOrPlaceholder(conf.Endpoint))
+	fmt.Fprintf(a.stdout, "Chat model: %s\n", valueOrPlaceholder(conf.ChatModel))
+	fmt.Fprintf(a.stdout, "Embedding model: %s\n", valueOrPlaceholder(conf.EmbeddingModel))
+	fmt.Fprintf(a.stdout, "Config path: %s\n", conf.Path())
 }
 
 func valueOrPlaceholder(value string) string {

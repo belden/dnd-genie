@@ -13,15 +13,25 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tauliang/DnDGenie/cli/config"
 )
 
-func newTestApp(t *testing.T, stdin string) (*App, *bytes.Buffer, *bytes.Buffer, string) {
+func newTestApp(t *testing.T, stdin string, conf *config.Config) (*App, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	app := NewApp(strings.NewReader(stdin), stdout, stderr, configPath)
-	return app, stdout, stderr, configPath
+
+	app, err := NewApp(strings.NewReader(stdin), stdout, stderr, configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %+v", err)
+	}
+
+	if conf != nil {
+		app.config.FromConfig(conf)
+	}
+
+	return app, stdout, stderr
 }
 
 // helper function, returns the last element of a slice
@@ -48,31 +58,29 @@ func (f doerFunc) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestConnectLMStudioNormalizesBareEndpoint(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"/connect", "lmstudio", "--url", "http://127.0.0.1:1234"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	config, err := loadConfig(configPath)
-	require.NoError(t, err)
-	assert.Equal(t, providerLMStudio, config.Provider)
-	assert.Equal(t, "http://127.0.0.1:1234/v1", config.Endpoint)
+	conf := app.config
+	assert.Equal(t, providerLMStudio, conf.Provider)
+	assert.Equal(t, "http://127.0.0.1:1234/v1", conf.Endpoint)
 	assert.Contains(t, stdout.String(), "Connected to lmstudio")
 }
 
 func TestConnectOllamaUsesDefaultEndpoint(t *testing.T) {
-	app, _, stderr, configPath := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"/connect", "ollama"})
 	assert.Equal(t, 0, code, stderr.String())
 
-	config, err := loadConfig(configPath)
-	require.NoError(t, err)
-	assert.Equal(t, defaultOllamaEndpoint, config.Endpoint)
+	conf := app.config
+	assert.Equal(t, defaultOllamaEndpoint, conf.Endpoint)
 }
 
 func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"connect", "lmstudio"})
 	assert.Equal(t, 0, code, "connect failed", stderr.String())
@@ -81,15 +89,14 @@ func TestModelsConfigureChatAndEmbeddingModels(t *testing.T) {
 	code = app.Run([]string{"models", "--chat", "glm-5.0", "--embedding=text-embedding-nomic-embed-text-v1.5"})
 	assert.Equal(t, 0, code, "models failed", stderr.String())
 
-	config, err := loadConfig(configPath)
-	require.NoError(t, err)
-	assert.Equal(t, "glm-5.0", config.ChatModel)
-	assert.Equal(t, "text-embedding-nomic-embed-text-v1.5", config.EmbeddingModel)
+	conf := app.config
+	assert.Equal(t, "glm-5.0", conf.ChatModel)
+	assert.Equal(t, "text-embedding-nomic-embed-text-v1.5", conf.EmbeddingModel)
 	assert.Contains(t, stdout.String(), "Configured models")
 }
 
 func TestModelsPrintsExistingConfig(t *testing.T) {
-	app, stdout, stderr, _ := newTestApp(t, "")
+	app, stdout, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"connect", "lmstudio"})
 	assert.Equal(t, 0, code, "connect failed", stderr.String())
@@ -107,18 +114,18 @@ func TestModelsPrintsExistingConfig(t *testing.T) {
 }
 
 func TestInteractiveModeProcessesCommands(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(
+	app, stdout, stderr := newTestApp(
 		t,
 		"/connect lmstudio --url http://localhost:1234\nmodels --chat chat --embedding embed\nstatus\n/quit\n",
+		nil,
 	)
 
 	code := app.Run(nil)
 	assert.Equal(t, 0, code, stderr.String())
 
-	config, err := loadConfig(configPath)
-	require.NoError(t, err)
-	assert.Equal(t, "chat", config.ChatModel)
-	assert.Equal(t, "embed", config.EmbeddingModel)
+	conf := app.config
+	assert.Equal(t, "chat", conf.ChatModel)
+	assert.Equal(t, "embed", conf.EmbeddingModel)
 
 	output := stdout.String()
 	assert.Contains(t, output, "dndx chat", "stdout missing banner")
@@ -132,19 +139,19 @@ func TestInteractivePromptBlinksUnderscore(t *testing.T) {
 
 func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 	question := "provide a brief random encounter table for 3 first-level characters. They are in the woods."
-	app, stdout, stderr, configPath := newTestApp(t, question+"\n/quit\n")
-
-	err := saveConfig(configPath, Config{
+	app, stdout, stderr := newTestApp(t, question+"\n/quit\n", &config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
 	})
+
+	err := app.config.Save()
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "1. Three nervous scouts cross the trail."}
-	var factoryConfig Config
-	app.chatFactory = func(config Config) (chatClient, error) {
-		factoryConfig = config
+	var factoryConfig config.Config
+	app.chatFactory = func(conf *config.Config) (chatClient, error) {
+		factoryConfig = *conf
 		return fake, nil
 	}
 
@@ -164,17 +171,16 @@ func TestInteractiveModeSendsPlainTextToChat(t *testing.T) {
 }
 
 func TestDirectChatCommandSendsQuestion(t *testing.T) {
-	app, stdout, stderr, configPath := newTestApp(t, "")
-
-	err := saveConfig(configPath, Config{
+	app, stdout, stderr := newTestApp(t, "", &config.Config{
 		Provider:  providerLMStudio,
 		Endpoint:  defaultLMStudioEndpoint,
 		ChatModel: "glm-5.0",
 	})
+	err := app.config.Save()
 	require.NoError(t, err)
 
 	fake := &fakeChatClient{response: "Roll 1d4 wolves."}
-	app.chatFactory = func(_ Config) (chatClient, error) {
+	app.chatFactory = func(_ *config.Config) (chatClient, error) {
 		return fake, nil
 	}
 
@@ -186,7 +192,7 @@ func TestDirectChatCommandSendsQuestion(t *testing.T) {
 }
 
 func TestChatRequiresConfiguredEndpoint(t *testing.T) {
-	app, _, stderr, _ := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"chat", "hello"})
 	assert.NotEqual(t, 0, code, "expected failure")
@@ -194,7 +200,7 @@ func TestChatRequiresConfiguredEndpoint(t *testing.T) {
 }
 
 func TestUnknownProviderReturnsUsageError(t *testing.T) {
-	app, _, stderr, _ := newTestApp(t, "")
+	app, _, stderr := newTestApp(t, "", nil)
 
 	code := app.Run([]string{"/connect", "kobold"})
 	assert.NotEqual(t, 0, code, "expected failure")
@@ -208,16 +214,21 @@ func TestConfigPathFromEnvironment(t *testing.T) {
 }
 
 func TestLoadConfigMissingFileReturnsEmptyConfig(t *testing.T) {
-	config, err := loadConfig(filepath.Join(t.TempDir(), "missing.json"))
+	conf, err := config.Load(filepath.Join(t.TempDir(), "missing.json"))
 	require.NoError(t, err)
-	assert.True(t, isEmptyConfig(config), "config should be empty")
+	assert.True(t, conf.IsEmpty(), "config should be empty")
 }
 
 func TestSaveConfigCreatesPrivateConfigFile(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "nested", "config.json")
-	config := Config{Provider: providerLMStudio, Endpoint: defaultLMStudioEndpoint}
+	conf, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	err := saveConfig(configPath, config)
+	conf.Provider = providerLMStudio
+	conf.Endpoint = defaultLMStudioEndpoint
+	err = conf.Save()
 	require.NoError(t, err)
 
 	info, err := os.Stat(configPath)

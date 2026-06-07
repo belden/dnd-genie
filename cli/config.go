@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,56 +14,21 @@ const (
 	defaultOllamaEndpoint   = "http://127.0.0.1:11434"
 )
 
-type Config struct {
-	Provider       string `json:"provider,omitempty"`
-	Endpoint       string `json:"endpoint,omitempty"`
-	ChatModel      string `json:"chat_model,omitempty"`
-	EmbeddingModel string `json:"embedding_model,omitempty"`
-}
-
 func configPathFromEnv() string {
 	if configured := os.Getenv("DNDX_CONFIG"); configured != "" {
 		return configured
 	}
 
-	if d, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(d, "dndx", "config.json")
-	}
-
-	if d, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(d, ".dndx", "config.json")
-	}
-
-	return "dndx.json"
-}
-
-func loadConfig(path string) (Config, error) {
-	data, err := os.ReadFile(path)
+	configDir, err := os.UserConfigDir()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Config{}, nil
+		homeDir, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return "dndx.json"
 		}
-		return Config{}, err
+		configDir = filepath.Join(homeDir, ".config")
 	}
 
-	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		return Config{}, err
-	}
-	return config, nil
-}
-
-func saveConfig(path string, config Config) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o600)
+	return filepath.Join(configDir, "dndx", "config.json")
 }
 
 func normalizeProvider(provider string) (string, error) {
@@ -99,11 +62,4 @@ func normalizeEndpoint(provider string, endpoint string) string {
 		return normalized + "/v1"
 	}
 	return normalized
-}
-
-func isEmptyConfig(config Config) bool {
-	return config.Provider == "" &&
-		config.Endpoint == "" &&
-		config.ChatModel == "" &&
-		config.EmbeddingModel == ""
 }

@@ -1,7 +1,15 @@
 package main
 
-import "os"
+import (
+	"log"
+	"os"
+)
 
 func main() {
-	os.Exit(NewApp(os.Stdin, os.Stdout, os.Stderr, configPathFromEnv()).Run(os.Args[1:]))
+	app, err := NewApp(os.Stdin, os.Stdout, os.Stderr, configPathFromEnv())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	os.Exit(app.Run(os.Args[1:]))
 }
